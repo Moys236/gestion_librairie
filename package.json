@@ -5,25 +5,24 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:worker": "opennextjs-cloudflare build && node scratch/copy_worker_assets.js",
+    "build:worker": "npx @cloudflare/next-on-pages",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "better-sqlite3": "^12.11.1",
+    "@cloudflare/next-on-pages": "^1.13.16",
     "@cloudflare/workers-types": "^5.20260714.1",
-    "@opennextjs/cloudflare": "^1.20.1",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
