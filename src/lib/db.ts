@@ -15,14 +15,14 @@ export interface AsyncDatabase {
 }
 
 class D1DatabaseAdapter implements AsyncDatabase {
-  private get d1() {
+  private async getD1() {
     try {
-      const { env } = getCloudflareContext();
+      const { env } = await getCloudflareContext({ async: true });
       if (env && (env as any).DB) {
         return (env as any).DB;
       }
     } catch (e) {
-      console.warn("Accès synchrone au contexte Cloudflare échoué :", e);
+      console.warn("Accès asynchrone au contexte Cloudflare échoué :", e);
     }
     const d1Db = (process.env as any).DB || (globalThis as any).DB;
     if (!d1Db) {
@@ -43,20 +43,24 @@ class D1DatabaseAdapter implements AsyncDatabase {
 
       async all<T = any>(...params: any[]): Promise<T[]> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
         const res = await (stmt as any).all();
         return res.results;
       }
 
       async get<T = any>(...params: any[]): Promise<T | undefined> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
-        return await (stmt as any).first() || undefined;
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
+        const res = await (stmt as any).first();
+        return res || undefined;
       }
 
       async run(...params: any[]): Promise<{ success: boolean; changes?: number; lastRowId?: number }> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
         const res = await (stmt as any).run();
         return {
           success: res.success,
@@ -70,8 +74,9 @@ class D1DatabaseAdapter implements AsyncDatabase {
   }
 
   async batch(statements: AsyncStatement[]): Promise<any[]> {
-    const d1Stmts = statements.map(s => this.d1.prepare(s.sql).bind(...s.params));
-    return await this.d1.batch(d1Stmts);
+    const d1 = await this.getD1();
+    const d1Stmts = statements.map(s => d1.prepare(s.sql).bind(...s.params));
+    return await d1.batch(d1Stmts);
   }
 }
 
