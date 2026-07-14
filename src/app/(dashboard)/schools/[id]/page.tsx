@@ -2,7 +2,9 @@ import db from '@/lib/db';
 import { redirect } from 'next/navigation';
 import PageTitle from '@/components/PageTitle';
 import SchoolDetails from '@/components/SchoolDetails';
+import BackButton from '@/components/BackButton';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface School {
@@ -34,14 +36,14 @@ export default async function SchoolDetailPage({
   }
 
   // Fetch school details
-  const school = db.prepare('SELECT * FROM schools WHERE id = ?').get(schoolId) as School | undefined;
+  const school = await db.prepare('SELECT * FROM schools WHERE id = ?').get(schoolId) as School | undefined;
 
   if (!school) {
     redirect('/schools');
   }
 
   // Fetch school lists
-  const lists = db.prepare('SELECT * FROM school_lists WHERE school_id = ? ORDER BY id DESC').all(schoolId) as SchoolList[];
+  const lists = await db.prepare('SELECT * FROM school_lists WHERE school_id = ? ORDER BY id DESC').all(schoolId) as SchoolList[];
 
   return (
     <>
@@ -58,5 +60,3 @@ export default async function SchoolDetailPage({
     </>
   );
 }
-
-import BackButton from '@/components/BackButton';

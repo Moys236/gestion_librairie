@@ -18,8 +18,8 @@ function formatLocalDate(date: Date): string {
  * Recalculates the stock for a product by summing all history movements.
  * Returns the recalculated stock level.
  */
-export function recalculateProductStock(productId: number): number {
-  const result = db.prepare(`
+export async function recalculateProductStock(productId: number): Promise<number> {
+  const result = await db.prepare(`
     SELECT COALESCE(SUM(CASE WHEN type_mouvement = 'entree' THEN quantite_unitaire ELSE -quantite_unitaire END), 0) as total_stock
     FROM stock_histories
     WHERE produit_id = ?
@@ -31,8 +31,8 @@ export function recalculateProductStock(productId: number): number {
  * Recalculates the stock for a product by summing all history movements except one.
  * Returns the recalculated stock level.
  */
-export function recalculateProductStockExcept(productId: number, movementId: number): number {
-  const result = db.prepare(`
+export async function recalculateProductStockExcept(productId: number, movementId: number): Promise<number> {
+  const result = await db.prepare(`
     SELECT COALESCE(SUM(CASE WHEN type_mouvement = 'entree' THEN quantite_unitaire ELSE -quantite_unitaire END), 0) as total_stock
     FROM stock_histories
     WHERE produit_id = ? AND id != ?
@@ -52,7 +52,7 @@ interface StockMovementOptions {
  * Creates a stock movement (entree or sortie) for a product.
  * Updates the product stock level transactionally.
  */
-export function createStockMovement(productId: number, { type_mouvement, quantite_unitaire, nombre_colis = null, date_mouvement = null }: StockMovementOptions) {
+export async function createStockMovement(productId: number, { type_mouvement, quantite_unitaire, nombre_colis = null, date_mouvement = null }: StockMovementOptions) {
   const qty = Number(quantite_unitaire);
   if (isNaN(qty) || qty <= 0) {
     throw new Error('الكمية يجب أن تكون أكبر من الصفر');
@@ -77,63 +77,61 @@ export function createStockMovement(productId: number, { type_mouvement, quantit
     dateStr = `${dateStr} ${timeStr}`;
   }
 
-  return db.transaction(() => {
-    // 1. Get current product stock from history
-    const currentStock = recalculateProductStock(productId);
-    
-    const productExists = db.prepare('SELECT 1 FROM products WHERE id = ?').get(productId);
-    if (!productExists) {
-      throw new Error('المنتج غير موجود');
-    }
+  // 1. Get current product stock from history
+  const currentStock = await recalculateProductStock(productId);
+  
+  const productExists = await db.prepare('SELECT 1 FROM products WHERE id = ?').get(productId);
+  if (!productExists) {
+    throw new Error('المنتج غير موجود');
+  }
 
-    if (type_mouvement === 'sortie' && currentStock < qty) {
-      throw new Error(`المخزون غير كافٍ. المتوفر حالياً: ${currentStock}`);
-    }
+  if (type_mouvement === 'sortie' && currentStock < qty) {
+    throw new Error(`المخزون غير كافٍ. المتوفر حالياً: ${currentStock}`);
+  }
 
-    const newStock = type_mouvement === 'entree' ? currentStock + qty : currentStock - qty;
+  const newStock = type_mouvement === 'entree' ? currentStock + qty : currentStock - qty;
 
-    // 2. Insert stock history record
-    const insertHistory = db.prepare(`
-      INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    const historyResult = insertHistory.run(
-      productId,
-      type_mouvement,
-      qty,
-      parsedColis,
-      dateStr,
-      newStock
-    );
+  // 2. Prepare statements for D1 batch operation
+  const insertHistory = db.prepare(`
+    INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  
+  const updateProduct = db.prepare('UPDATE products SET stock = ? WHERE id = ?');
 
-    // 3. Update products table
-    const recalculatedStock = recalculateProductStock(productId);
-    db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(recalculatedStock, productId);
+  const batchResults = await db.batch([
+    insertHistory.bind(productId, type_mouvement, qty, parsedColis, dateStr, newStock),
+    updateProduct.bind(newStock, productId)
+  ]);
 
-    return {
-      success: true,
-      movementId: historyResult.lastInsertRowid,
-      newStock: recalculatedStock,
-      date_mouvement: dateStr
-    };
-  })();
+  // Extract the generated ID of the stock_histories insert
+  // For local better-sqlite3: it returns result containing lastInsertRowid
+  // For Cloudflare D1: batch results contain metadata
+  const insertResult = batchResults[0];
+  const movementId = insertResult.lastRowId || insertResult.lastInsertRowid || null;
 
+  return {
+    success: true,
+    movementId,
+    newStock,
+    date_mouvement: dateStr
+  };
 }
 
 /**
  * Fetches the paginated stock movement history of a given product.
  */
-export function getProductStockHistory(productId: number, page = 1, limit = 10) {
+export async function getProductStockHistory(productId: number, page = 1, limit = 10) {
   const offset = (page - 1) * limit;
   
-  const movements = db.prepare(`
+  const movements = await db.prepare(`
     SELECT * FROM stock_histories
     WHERE produit_id = ?
     ORDER BY date_mouvement DESC, id DESC
     LIMIT ? OFFSET ?
   `).all(productId, limit, offset);
   
-  const countRes = db.prepare(`
+  const countRes = await db.prepare(`
     SELECT COUNT(*) as count FROM stock_histories WHERE produit_id = ?
   `).get(productId) as { count: number } | undefined;
   
@@ -161,7 +159,7 @@ interface ProductData {
  * Creates a product and registers its initial stock movement if > 0.
  * Works seamlessly within existing outer transactions.
  */
-export function createProductWithInitialStock(productData: ProductData, specifications = {}) {
+export async function createProductWithInitialStock(productData: ProductData, specifications = {}) {
   const { type_id, name, reference, purchase_price, selling_price, stock = 0 } = productData;
   const initialStock = Number(stock) || 0;
   
@@ -174,7 +172,7 @@ export function createProductWithInitialStock(productData: ProductData, specific
     VALUES (?, ?, ?, ?, ?, 0, ?)
   `);
   
-  const result = insertProduct.run(
+  const result = await insertProduct.run(
     type_id ? Number(type_id) : null,
     name,
     reference || null,
@@ -183,22 +181,21 @@ export function createProductWithInitialStock(productData: ProductData, specific
     JSON.stringify(specifications)
   );
   
-  const productId = result.lastInsertRowid as number;
+  const productId = (result.lastRowId || result.lastRowId === 0) ? result.lastRowId : (result as any).lastInsertRowid;
   
   if (initialStock > 0) {
     const dateStr = formatLocalDate(new Date());
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
       VALUES (?, 'entree', ?, NULL, ?, ?)
     `).run(productId, initialStock, dateStr, initialStock);
   }
 
   // Recalculate and update product table stock
-  const recalculatedStock = recalculateProductStock(productId);
-  db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(recalculatedStock, productId);
+  const recalculatedStock = await recalculateProductStock(productId);
+  await db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(recalculatedStock, productId);
   
   return productId;
-
 }
 
 interface UpdateStockMovementOptions {
@@ -212,7 +209,7 @@ interface UpdateStockMovementOptions {
  * Updates the latest stock movement for a product.
  * Ensures that only the latest entry can be modified to maintain historical consistency.
  */
-export function updateLatestStockMovement(productId: number, movementId: number, { type_mouvement, quantite_unitaire, nombre_colis = null, date_mouvement = null }: UpdateStockMovementOptions) {
+export async function updateLatestStockMovement(productId: number, movementId: number, { type_mouvement, quantite_unitaire, nombre_colis = null, date_mouvement = null }: UpdateStockMovementOptions) {
   const qty = Number(quantite_unitaire);
   if (isNaN(qty) || qty <= 0) {
     throw new Error('الكمية يجب أن تكون أكبر من الصفر');
@@ -237,54 +234,53 @@ export function updateLatestStockMovement(productId: number, movementId: number,
     dateStr = `${dateStr} ${timeStr}`;
   }
 
-  return db.transaction(() => {
-    // 1. Get the latest movements to check if movementId is the latest
-    const movements = db.prepare(`
-      SELECT id FROM stock_histories
-      WHERE produit_id = ?
-      ORDER BY date_mouvement DESC, id DESC
-      LIMIT 1
-    `).all(productId) as { id: number }[];
+  // 1. Get the latest movements to check if movementId is the latest
+  const movements = await db.prepare(`
+    SELECT id FROM stock_histories
+    WHERE produit_id = ?
+    ORDER BY date_mouvement DESC, id DESC
+    LIMIT 1
+  `).all(productId) as { id: number }[];
 
-    if (movements.length === 0) {
-      throw new Error('لا يوجد سجل حركات مخزون لهذا المنتج');
+  if (movements.length === 0) {
+    throw new Error('لا يوجد سجل حركات مخزون لهذاالمنتج');
+  }
+
+  const latestMovement = movements[0];
+  if (latestMovement.id !== movementId) {
+    throw new Error('يمكن فقط تعديل الحركة الأخيرة في المخزون');
+  }
+
+  const prevStock = await recalculateProductStockExcept(productId, movementId);
+
+  let newStock = prevStock;
+  if (type_mouvement === 'entree') {
+    newStock += qty;
+  } else {
+    if (prevStock < qty) {
+      throw new Error(`المخزون غير كافٍ. المتوفر قبل هذه الحركة: ${prevStock}`);
     }
+    newStock -= qty;
+  }
 
-    const latestMovement = movements[0];
-    if (latestMovement.id !== movementId) {
-      throw new Error('يمكن فقط تعديل الحركة الأخيرة في المخزون');
-    }
+  // 2. Prepare updates for D1 batch operation
+  const updateHistory = db.prepare(`
+    UPDATE stock_histories
+    SET type_mouvement = ?, quantite_unitaire = ?, nombre_colis = ?, date_mouvement = ?, stock_resultat = ?, updated_at = datetime('now', 'localtime')
+    WHERE id = ?
+  `);
+  
+  const updateProduct = db.prepare('UPDATE products SET stock = ? WHERE id = ?');
 
-    const prevStock = recalculateProductStockExcept(productId, movementId);
+  await db.batch([
+    updateHistory.bind(type_mouvement, qty, parsedColis, dateStr, newStock, movementId),
+    updateProduct.bind(newStock, productId)
+  ]);
 
-    let newStock = prevStock;
-    if (type_mouvement === 'entree') {
-      newStock += qty;
-    } else {
-      if (prevStock < qty) {
-        throw new Error(`المخزون غير كافٍ. المتوفر قبل هذه الحركة: ${prevStock}`);
-      }
-      newStock -= qty;
-    }
-
-    // 2. Update stock history record
-    db.prepare(`
-      UPDATE stock_histories
-      SET type_mouvement = ?, quantite_unitaire = ?, nombre_colis = ?, date_mouvement = ?, stock_resultat = ?, updated_at = datetime('now', 'localtime')
-      WHERE id = ?
-    `).run(type_mouvement, qty, parsedColis, dateStr, newStock, movementId);
-
-    // 3. Update products table
-    const recalculatedStock = recalculateProductStock(productId);
-    db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(recalculatedStock, productId);
-
-    return {
-      success: true,
-      movementId,
-      newStock: recalculatedStock,
-      date_mouvement: dateStr
-    };
-  })();
-
+  return {
+    success: true,
+    movementId,
+    newStock,
+    date_mouvement: dateStr
+  };
 }
-

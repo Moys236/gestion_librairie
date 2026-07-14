@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const runtime = 'edge';
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const data = await request.json();
+    const data = await request.json() as any;
     const { category_id, name, default_specs } = data;
 
     if (!category_id || !name) {
@@ -15,9 +17,9 @@ export async function PUT(
     }
 
     const stmt = db.prepare('UPDATE types SET category_id = ?, name = ?, default_specs = ? WHERE id = ?');
-    stmt.run(Number(category_id), name.trim(), JSON.stringify(default_specs || []), id);
+    await stmt.run(Number(category_id), name.trim(), JSON.stringify(default_specs || []), id);
 
-    const updatedType = db.prepare('SELECT * FROM types WHERE id = ?').get(id);
+    const updatedType = await db.prepare('SELECT * FROM types WHERE id = ?').get(id);
 
     return NextResponse.json(updatedType);
   } catch (error: any) {
@@ -33,7 +35,8 @@ export async function DELETE(
     const { id } = await params;
     
     // Check if type is used in products
-    const productsCount = (db.prepare('SELECT count(*) as count FROM products WHERE type_id = ?').get(id) as { count: number }).count;
+    const productsCountRes = await db.prepare('SELECT count(*) as count FROM products WHERE type_id = ?').get(id) as { count: number } | undefined;
+    const productsCount = productsCountRes ? productsCountRes.count : 0;
     if (productsCount > 0) {
       return NextResponse.json(
         { error: 'لا يمكن حذف هذا النوع لأنه مرتبط بمنتجات' },
@@ -41,7 +44,7 @@ export async function DELETE(
       );
     }
 
-    db.prepare('DELETE FROM types WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM types WHERE id = ?').run(id);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

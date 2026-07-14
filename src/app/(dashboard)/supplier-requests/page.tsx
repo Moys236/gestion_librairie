@@ -2,6 +2,7 @@ import db from '@/lib/db';
 import PageTitle from '@/components/PageTitle';
 import SupplierRequests from '@/components/SupplierRequests';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Product {
@@ -42,7 +43,7 @@ interface SupplierListItem {
 
 export default async function SupplierRequestsPage() {
   // 1. Fetch products catalog
-  const products = db.prepare(`
+  const products = await db.prepare(`
     SELECT p.*, t.name as type_name, c.name as category_name
     FROM products p 
     LEFT JOIN types t ON p.type_id = t.id
@@ -51,7 +52,7 @@ export default async function SupplierRequestsPage() {
   `).all() as Product[];
 
   // 2. Fetch categories and types for select filter dropdowns
-  const types = db.prepare(`
+  const types = await db.prepare(`
     SELECT t.*, c.name as category_name
     FROM types t
     JOIN categories c ON t.category_id = c.id
@@ -76,13 +77,13 @@ export default async function SupplierRequestsPage() {
   const categoriesWithTypes = Object.values(categoriesMap);
 
   // 3. Fetch all supplier request lists
-  const lists = db.prepare(`
+  const lists = await db.prepare(`
     SELECT * FROM supplier_lists 
     ORDER BY created_at DESC
   `).all() as SupplierList[];
 
   // 4. Fetch all list items
-  const items = db.prepare(`
+  const items = await db.prepare(`
     SELECT sli.*, p.name as product_name, p.reference as product_reference,
            t.name as type_name, c.name as category_name
     FROM supplier_list_items sli

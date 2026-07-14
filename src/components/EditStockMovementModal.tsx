@@ -57,7 +57,7 @@ export default function EditStockMovementModal({ id, productId, movement, onClos
         })
       });
 
-      const result = await response.json();
+      const result = await response.json() as any;
 
       if (!response.ok) {
         throw new Error(result.error || 'حدث خطأ غير متوقع أثناء تعديل الحركة.');

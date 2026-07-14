@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const runtime = 'edge';
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const data = await request.json();
+    const data = await request.json() as any;
     const { name } = data;
 
     if (!name) {
@@ -15,9 +17,9 @@ export async function PUT(
     }
 
     const stmt = db.prepare('UPDATE categories SET name = ? WHERE id = ?');
-    stmt.run(name.trim(), id);
+    await stmt.run(name.trim(), id);
 
-    const updatedCategory = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+    const updatedCategory = await db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
 
     return NextResponse.json(updatedCategory);
   } catch (error: any) {
@@ -33,7 +35,8 @@ export async function DELETE(
     const { id } = await params;
     
     // Check if category is used in types
-    const typesCount = (db.prepare('SELECT count(*) as count FROM types WHERE category_id = ?').get(id) as { count: number }).count;
+    const typesCountRes = await db.prepare('SELECT count(*) as count FROM types WHERE category_id = ?').get(id) as { count: number } | undefined;
+    const typesCount = typesCountRes ? typesCountRes.count : 0;
     if (typesCount > 0) {
       return NextResponse.json(
         { error: 'لا يمكن حذف هذه الفئة لأنها تحتوي على أنواع منتجات تابعة لها' },
@@ -41,7 +44,7 @@ export async function DELETE(
       );
     }
 
-    db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM categories WHERE id = ?').run(id);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

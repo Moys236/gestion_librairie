@@ -2,7 +2,9 @@ import db from '@/lib/db';
 import { redirect } from 'next/navigation';
 import PageTitle from '@/components/PageTitle';
 import ClientDetails from '@/components/ClientDetails';
+import BackButton from '@/components/BackButton';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Client {
@@ -42,14 +44,14 @@ export default async function ClientDetailPage({
 }) {
   const { id } = await params;
   
-  const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(id) as Client | undefined;
+  const client = await db.prepare('SELECT * FROM clients WHERE id = ?').get(id) as Client | undefined;
   
   if (!client) {
     redirect('/clients');
   }
 
-  const orders = db.prepare('SELECT * FROM orders WHERE client_id = ? ORDER BY created_at DESC').all(id) as Order[];
-  const payments = db.prepare('SELECT * FROM payments WHERE client_id = ? ORDER BY payment_date DESC').all(id) as Payment[];
+  const orders = await db.prepare('SELECT * FROM orders WHERE client_id = ? ORDER BY created_at DESC').all(id) as Order[];
+  const payments = await db.prepare('SELECT * FROM payments WHERE client_id = ? ORDER BY payment_date DESC').all(id) as Payment[];
 
   return (
     <>
@@ -64,5 +66,3 @@ export default async function ClientDetailPage({
     </>
   );
 }
-
-import BackButton from '@/components/BackButton';

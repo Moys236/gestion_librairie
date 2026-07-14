@@ -2,6 +2,7 @@ import db from '@/lib/db';
 import Link from 'next/link';
 import PageTitle from '@/components/PageTitle';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface LowStockProduct {
@@ -15,49 +16,57 @@ interface LowStockProduct {
 
 export default async function DashboardPage() {
   // Product Statistics
-  const totalProducts = (db.prepare(`
+  const totalProductsRes = await db.prepare(`
     SELECT COUNT(*) as count
     FROM products
-  `).get() as { count: number }).count;
+  `).get() as { count: number } | undefined;
+  const totalProducts = totalProductsRes ? totalProductsRes.count : 0;
 
-  const totalCategories = (db.prepare(`
+  const totalCategoriesRes = await db.prepare(`
     SELECT COUNT(*) as count
     FROM categories
-  `).get() as { count: number }).count;
+  `).get() as { count: number } | undefined;
+  const totalCategories = totalCategoriesRes ? totalCategoriesRes.count : 0;
 
-  const totalTypes = (db.prepare(`
+  const totalTypesRes = await db.prepare(`
     SELECT COUNT(*) as count
     FROM types
-  `).get() as { count: number }).count;
+  `).get() as { count: number } | undefined;
+  const totalTypes = totalTypesRes ? totalTypesRes.count : 0;
 
-  const totalStock = (db.prepare(`
+  const totalStockRes = await db.prepare(`
     SELECT COALESCE(SUM(stock), 0) as total
     FROM products
-  `).get() as { total: number }).total;
+  `).get() as { total: number } | undefined;
+  const totalStock = totalStockRes ? totalStockRes.total : 0;
 
-  const stockValueSelling = (db.prepare(`
+  const stockValueSellingRes = await db.prepare(`
     SELECT COALESCE(SUM(selling_price * stock), 0) as total
     FROM products
-  `).get() as { total: number }).total;
+  `).get() as { total: number } | undefined;
+  const stockValueSelling = stockValueSellingRes ? stockValueSellingRes.total : 0;
 
-  const stockValuePurchase = (db.prepare(`
+  const stockValuePurchaseRes = await db.prepare(`
     SELECT COALESCE(SUM(purchase_price * stock), 0) as total
     FROM products
-  `).get() as { total: number }).total;
+  `).get() as { total: number } | undefined;
+  const stockValuePurchase = stockValuePurchaseRes ? stockValuePurchaseRes.total : 0;
 
-  const outOfStock = (db.prepare(`
+  const outOfStockRes = await db.prepare(`
     SELECT COUNT(*) as count
     FROM products
     WHERE stock = 0
-  `).get() as { count: number }).count;
+  `).get() as { count: number } | undefined;
+  const outOfStock = outOfStockRes ? outOfStockRes.count : 0;
 
-  const lowStock = (db.prepare(`
+  const lowStockRes = await db.prepare(`
     SELECT COUNT(*) as count
     FROM products
     WHERE stock > 0 AND stock <= 10
-  `).get() as { count: number }).count;
+  `).get() as { count: number } | undefined;
+  const lowStock = lowStockRes ? lowStockRes.count : 0;
 
-  const lowStockProducts = db.prepare(`
+  const lowStockProducts = await db.prepare(`
     SELECT p.id, p.name, p.reference, p.stock, t.name as type_name, c.name as category_name
     FROM products p
     LEFT JOIN types t ON p.type_id = t.id

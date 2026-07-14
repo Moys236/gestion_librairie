@@ -2,7 +2,9 @@ import db from '@/lib/db';
 import { redirect } from 'next/navigation';
 import PageTitle from '@/components/PageTitle';
 import EditOrderForm from '@/components/EditOrderForm';
+import BackButton from '@/components/BackButton';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Order {
@@ -51,7 +53,7 @@ export default async function OrderDetailPage({
   }
 
   // Fetch order joined
-  const order = db.prepare(`
+  const order = await db.prepare(`
     SELECT o.*, c.name as client_name, c.phone as client_phone 
     FROM orders o
     LEFT JOIN clients c ON o.client_id = c.id
@@ -63,7 +65,7 @@ export default async function OrderDetailPage({
   }
 
   // Fetch order items
-  const orderItems = db.prepare(`
+  const orderItems = await db.prepare(`
     SELECT oi.*, p.name as product_name
     FROM order_items oi
     LEFT JOIN products p ON oi.product_id = p.id
@@ -71,7 +73,7 @@ export default async function OrderDetailPage({
   `).all(orderId) as OrderItem[];
 
   // Fetch products
-  const products = db.prepare('SELECT id, name, selling_price, stock FROM products ORDER BY name ASC').all() as Product[];
+  const products = await db.prepare('SELECT id, name, selling_price, stock FROM products ORDER BY name ASC').all() as Product[];
 
   return (
     <>
@@ -95,5 +97,3 @@ export default async function OrderDetailPage({
     </>
   );
 }
-
-import BackButton from '@/components/BackButton';

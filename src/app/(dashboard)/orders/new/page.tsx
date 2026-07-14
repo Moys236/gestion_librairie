@@ -2,6 +2,7 @@ import db from '@/lib/db';
 import PageTitle from '@/components/PageTitle';
 import NewOrderForm from '@/components/NewOrderForm';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Client {
@@ -17,8 +18,8 @@ interface Product {
 }
 
 export default async function NewOrderPage() {
-  const clients = db.prepare('SELECT id, name FROM clients ORDER BY name ASC').all() as Client[];
-  const products = db.prepare('SELECT id, name, selling_price, stock FROM products ORDER BY name ASC').all() as Product[];
+  const clients = await db.prepare('SELECT id, name FROM clients ORDER BY name ASC').all() as Client[];
+  const products = await db.prepare('SELECT id, name, selling_price, stock FROM products ORDER BY name ASC').all() as Product[];
 
   return (
     <>

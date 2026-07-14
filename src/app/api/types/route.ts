@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
+export const runtime = 'edge';
+
 export async function GET() {
   try {
-    const types = db.prepare(`
+    const types = await db.prepare(`
       SELECT t.*, c.name as category_name
       FROM types t
       JOIN categories c ON t.category_id = c.id
@@ -17,7 +19,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const data = await request.json();
+    const data = await request.json() as any;
     const { category_id, name, default_specs } = data;
 
     if (!category_id || !name) {
@@ -25,9 +27,10 @@ export async function POST(request: Request) {
     }
 
     const stmt = db.prepare('INSERT INTO types (category_id, name, default_specs) VALUES (?, ?, ?)');
-    const info = stmt.run(Number(category_id), name.trim(), JSON.stringify(default_specs || []));
+    const info = await stmt.run(Number(category_id), name.trim(), JSON.stringify(default_specs || []));
+    const lastId = info.lastRowId || (info as any).lastInsertRowid;
 
-    const newType = db.prepare('SELECT * FROM types WHERE id = ?').get(info.lastInsertRowid);
+    const newType = await db.prepare('SELECT * FROM types WHERE id = ?').get(lastId);
 
     return NextResponse.json(newType, { status: 201 });
   } catch (error: any) {

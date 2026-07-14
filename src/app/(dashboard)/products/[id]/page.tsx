@@ -3,7 +3,9 @@ import { getProductStockHistory } from '@/lib/stock';
 import { redirect } from 'next/navigation';
 import PageTitle from '@/components/PageTitle';
 import ProductDetailsForm from '@/components/ProductDetailsForm';
+import BackButton from '@/components/BackButton';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Product {
@@ -46,7 +48,7 @@ export default async function ProductDetailPage({
   }
 
   // Fetch product joined
-  const product = db.prepare(`
+  const product = await db.prepare(`
     SELECT p.*, t.name as type_name, t.category_id as category_id, c.name as category_name
     FROM products p 
     LEFT JOIN types t ON p.type_id = t.id
@@ -59,11 +61,11 @@ export default async function ProductDetailPage({
   }
 
   // Fetch categories and types
-  const categories = db.prepare("SELECT * FROM categories ORDER BY name ASC").all() as Category[];
-  const types = db.prepare("SELECT * FROM types ORDER BY name ASC").all() as ProductType[];
+  const categories = await db.prepare("SELECT * FROM categories ORDER BY name ASC").all() as Category[];
+  const types = await db.prepare("SELECT * FROM types ORDER BY name ASC").all() as ProductType[];
 
   // Fetch page 1 initial history
-  const initialHistory = getProductStockHistory(productId, 1, 10);
+  const initialHistory = await getProductStockHistory(productId, 1, 10);
 
   return (
     <>
@@ -83,5 +85,3 @@ export default async function ProductDetailPage({
     </>
   );
 }
-
-import BackButton from '@/components/BackButton';

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createStockMovement, getProductStockHistory, updateLatestStockMovement } from '@/lib/stock';
 
+export const runtime = 'edge';
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +18,7 @@ export async function GET(
     const page = Number(searchParams.get('page') || '1');
     const limit = Number(searchParams.get('limit') || '10');
 
-    const history = getProductStockHistory(productId, page, limit);
+    const history = await getProductStockHistory(productId, page, limit);
 
     return NextResponse.json(history);
   } catch (err: any) {
@@ -35,10 +37,10 @@ export async function POST(
       return NextResponse.json({ error: 'معرف المنتج غير صالح' }, { status: 400 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as any;
     const { type_mouvement, quantite_unitaire, nombre_colis, date_mouvement } = body;
 
-    const result = createStockMovement(productId, {
+    const result = await createStockMovement(productId, {
       type_mouvement,
       quantite_unitaire,
       nombre_colis,
@@ -68,14 +70,14 @@ export async function PUT(
       return NextResponse.json({ error: 'معرف المنتج غير صالح' }, { status: 400 });
     }
 
-    const body = await request.json();
+    const body = await request.json() as any;
     const { movementId, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement } = body;
 
     if (!movementId) {
       return NextResponse.json({ error: 'معرف الحركة مطلوب' }, { status: 400 });
     }
 
-    const result = updateLatestStockMovement(productId, Number(movementId), {
+    const result = await updateLatestStockMovement(productId, Number(movementId), {
       type_mouvement,
       quantite_unitaire,
       nombre_colis,
@@ -94,4 +96,3 @@ export async function PUT(
     return NextResponse.json({ error: err.message }, { status });
   }
 }
-

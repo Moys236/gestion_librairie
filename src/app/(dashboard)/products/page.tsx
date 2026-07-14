@@ -3,6 +3,7 @@ import PageTitle from '@/components/PageTitle';
 import ProductsList from '@/components/ProductsList';
 import TypeManager from '@/components/TypeManager';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface RawProduct {
@@ -29,7 +30,7 @@ interface RawType {
 
 export default async function ProductsPage() {
   // Fetch products
-  const products = db.prepare(`
+  const products = await db.prepare(`
     SELECT p.*, t.name as type_name, c.name as category_name
     FROM products p 
     LEFT JOIN types t ON p.type_id = t.id
@@ -38,7 +39,7 @@ export default async function ProductsPage() {
   `).all() as RawProduct[];
 
   // Fetch categories and types for construct optgroups
-  const types = db.prepare(`
+  const types = await db.prepare(`
     SELECT t.*, c.name as category_name
     FROM types t
     JOIN categories c ON t.category_id = c.id

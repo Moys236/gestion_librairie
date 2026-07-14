@@ -2,6 +2,8 @@ import db from '@/lib/db';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
 
+export const runtime = 'edge';
+
 interface SidebarRow {
   cat_id: number;
   cat_name: string;
@@ -16,7 +18,7 @@ export default async function DashboardLayout({
 }) {
   let categoriesTree: any[] = [];
   try {
-    const rows = db.prepare(`
+    const rows = await db.prepare(`
       SELECT c.id as cat_id, c.name as cat_name,
              t.id as type_id, t.name as type_name
       FROM categories c

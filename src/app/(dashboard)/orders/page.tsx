@@ -3,6 +3,7 @@ import Link from 'next/link';
 import PageTitle from '@/components/PageTitle';
 import OrdersList from '@/components/OrdersList';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface RawOrder {
@@ -20,7 +21,7 @@ interface RawOrder {
 }
 
 export default async function OrdersPage() {
-  const orders = db.prepare(`
+  const orders = await db.prepare(`
     SELECT o.*, c.name as client_name 
     FROM orders o
     LEFT JOIN clients c ON o.client_id = c.id

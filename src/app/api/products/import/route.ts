@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { recalculateProductStock } from '@/lib/stock';
+
+export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    const { products, default_type_id } = await request.json();
+    const { products, default_type_id } = await request.json() as any;
     if (!Array.isArray(products)) {
       return NextResponse.json({ error: 'Invalid payload: products must be an array' }, { status: 400 });
     }
@@ -42,82 +43,132 @@ export async function POST(request: Request) {
       ...typeAliases
     ];
 
-    // Begin transaction for safety and performance
-    const importTransaction = db.transaction((rows: any[]) => {
-      for (let index = 0; index < rows.length; index++) {
-        const row = rows[index];
-        const nameVal = getValue(row, nameAliases);
-        
-        if (!nameVal || nameVal.toString().trim() === '') {
-          skippedCount++;
-          errors.push(`السطر ${index + 2}: اسم المنتج مفقود أو فارغ.`);
-          continue;
+    // Fetch existing categories, types, and products to minimize DB roundtrips
+    const categoriesList = await db.prepare("SELECT * FROM categories").all() as { id: number, name: string }[];
+    const typesList = await db.prepare("SELECT * FROM types").all() as { id: number, category_id: number, name: string, default_specs: string }[];
+    const productsList = await db.prepare("SELECT id, reference, specifications, stock FROM products").all() as { id: number, reference: string, specifications: string, stock: number }[];
+
+    async function getOrCreateCategory(name: string): Promise<number> {
+      const cleanName = name.toLowerCase().trim();
+      const existing = categoriesList.find(c => c.name.toLowerCase().trim() === cleanName);
+      if (existing) return existing.id;
+
+      const info = await db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
+      const catId = info.lastRowId || (info as any).lastInsertRowid as number;
+      categoriesList.push({ id: catId, name });
+      return catId;
+    }
+
+    async function getOrCreateType(catId: number, name: string): Promise<{ id: number, default_specs: string }> {
+      const cleanName = name.toLowerCase().trim();
+      const existing = typesList.find(t => t.category_id === catId && t.name.toLowerCase().trim() === cleanName);
+      if (existing) return { id: existing.id, default_specs: existing.default_specs };
+
+      const info = await db.prepare("INSERT INTO types (category_id, name) VALUES (?, ?)").run(catId, name);
+      const typeId = info.lastRowId || (info as any).lastInsertRowid as number;
+      const defaultSpecsStr = '[]';
+      typesList.push({ id: typeId, category_id: catId, name, default_specs: defaultSpecsStr });
+      return { id: typeId, default_specs: defaultSpecsStr };
+    }
+
+    for (let index = 0; index < products.length; index++) {
+      const row = products[index];
+      const nameVal = getValue(row, nameAliases);
+      
+      if (!nameVal || nameVal.toString().trim() === '') {
+        skippedCount++;
+        errors.push(`السطر ${index + 2}: اسم المنتج مفقود أو فارغ.`);
+        continue;
+      }
+      
+      const name = nameVal.toString().trim();
+      const referenceVal = getValue(row, referenceAliases);
+      const reference = referenceVal ? referenceVal.toString().trim() : null;
+      
+      const sellingPriceVal = getValue(row, sellingPriceAliases);
+      const selling_price = parseFloat(sellingPriceVal) || 0;
+      
+      const purchasePriceVal = getValue(row, purchasePriceAliases);
+      const purchase_price = parseFloat(purchasePriceVal) || 0;
+      
+      const stockVal = getValue(row, stockAliases);
+      const stock = parseInt(stockVal) || 0;
+      
+      const categoryNameVal = getValue(row, categoryAliases);
+      const categoryName = categoryNameVal ? categoryNameVal.toString().trim() : '';
+      
+      const typeNameVal = getValue(row, typeAliases);
+      const typeName = typeNameVal ? typeNameVal.toString().trim() : '';
+      
+      let typeId: number | null = null;
+      let defaultSpecs: any[] = [];
+
+      // Determine category and type
+      if (categoryName && typeName) {
+        const catId = await getOrCreateCategory(categoryName);
+        const typInfo = await getOrCreateType(catId, typeName);
+        typeId = typInfo.id;
+        try {
+          defaultSpecs = JSON.parse(typInfo.default_specs || '[]');
+        } catch (e) {}
+      } else if (default_type_id) {
+        typeId = Number(default_type_id);
+        const typ = typesList.find(t => t.id === typeId);
+        if (typ) {
+          try {
+            defaultSpecs = JSON.parse(typ.default_specs || '[]');
+          } catch (e) {}
         }
-        
-        const name = nameVal.toString().trim();
-        const referenceVal = getValue(row, referenceAliases);
-        const reference = referenceVal ? referenceVal.toString().trim() : null;
-        
-        const sellingPriceVal = getValue(row, sellingPriceAliases);
-        const selling_price = parseFloat(sellingPriceVal) || 0;
-        
-        const purchasePriceVal = getValue(row, purchasePriceAliases);
-        const purchase_price = parseFloat(purchasePriceVal) || 0;
-        
-        const stockVal = getValue(row, stockAliases);
-        const stock = parseInt(stockVal) || 0;
-        
-        const categoryNameVal = getValue(row, categoryAliases);
-        const categoryName = categoryNameVal ? categoryNameVal.toString().trim() : '';
-        
-        const typeNameVal = getValue(row, typeAliases);
-        const typeName = typeNameVal ? typeNameVal.toString().trim() : '';
-        
-        let typeId: number | null = null;
-        let defaultSpecs: any[] = [];
+      }
 
-        // Determine category and type
-        if (categoryName && typeName) {
-          // Find or create category
-          let cat = db.prepare("SELECT id FROM categories WHERE LOWER(name) = ?").get(categoryName.toLowerCase()) as { id: number } | undefined;
-          let catId: number;
-          if (cat) {
-            catId = cat.id;
-          } else {
-            const info = db.prepare("INSERT INTO categories (name) VALUES (?)").run(categoryName);
-            catId = info.lastInsertRowid as number;
-          }
+      // Gather specifications
+      const defaultSpecNames = defaultSpecs.map(s => {
+        const sName = typeof s === 'object' ? s.name : s;
+        return sName.toLowerCase().trim();
+      });
 
-          // Find or create type
-          let typ = db.prepare("SELECT id, default_specs FROM types WHERE category_id = ? AND LOWER(name) = ?").get(catId, typeName.toLowerCase()) as { id: number, default_specs: string } | undefined;
-          if (typ) {
-            typeId = typ.id;
-            try {
-              defaultSpecs = JSON.parse(typ.default_specs || '[]');
-            } catch (e) {}
-          } else {
-            const info = db.prepare("INSERT INTO types (category_id, name) VALUES (?, ?)").run(catId, typeName);
-            typeId = info.lastInsertRowid as number;
+      const specifications: Record<string, string> = {};
+
+      for (const key of Object.keys(row)) {
+        const cleanKey = key.toLowerCase().trim();
+        if (standardAliases.includes(cleanKey)) continue;
+
+        const val = row[key];
+        const isValEmpty = val === undefined || val === null || val.toString().trim() === '';
+        const isPrincipal = defaultSpecNames.includes(cleanKey);
+
+        if (isValEmpty) {
+          if (isPrincipal) {
+            const origSpec = defaultSpecs.find(s => {
+              const sName = typeof s === 'object' ? s.name : s;
+              return sName.toLowerCase().trim() === cleanKey;
+            });
+            const origSpecName = typeof origSpec === 'object' ? origSpec.name : origSpec;
+            specifications[origSpecName] = '';
           }
-        } else if (default_type_id) {
-          typeId = Number(default_type_id);
-          const typ = db.prepare("SELECT default_specs FROM types WHERE id = ?").get(typeId) as { default_specs: string } | undefined;
-          if (typ) {
-            try {
-              defaultSpecs = JSON.parse(typ.default_specs || '[]');
-            } catch (e) {}
-          }
+        } else {
+          const origSpec = defaultSpecs.find(s => {
+            const sName = typeof s === 'object' ? s.name : s;
+            return sName.toLowerCase().trim() === cleanKey;
+          });
+          const specName = origSpec ? (typeof origSpec === 'object' ? origSpec.name : origSpec) : key.trim();
+          specifications[specName] = val.toString().trim();
         }
+      }
 
-        // Gather specifications
-        const defaultSpecNames = defaultSpecs.map(s => {
-          const sName = typeof s === 'object' ? s.name : s;
-          return sName.toLowerCase().trim();
-        });
+      // Check if product reference already exists
+      let existingProduct: { id: number, specifications: string, stock: number } | undefined = undefined;
+      if (reference) {
+        existingProduct = productsList.find(p => p.reference === reference);
+      }
 
-        const specifications: Record<string, string> = {};
+      if (existingProduct) {
+        // Merge specifications
+        let mergedSpecs: Record<string, string> = {};
+        try {
+          mergedSpecs = JSON.parse(existingProduct.specifications || '{}');
+        } catch (e) {}
 
-        // Parse row keys
         for (const key of Object.keys(row)) {
           const cleanKey = key.toLowerCase().trim();
           if (standardAliases.includes(cleanKey)) continue;
@@ -126,14 +177,10 @@ export async function POST(request: Request) {
           const isValEmpty = val === undefined || val === null || val.toString().trim() === '';
           const isPrincipal = defaultSpecNames.includes(cleanKey);
 
-          if (isValEmpty) {
-            if (isPrincipal) {
-              const origSpec = defaultSpecs.find(s => {
-                const sName = typeof s === 'object' ? s.name : s;
-                return sName.toLowerCase().trim() === cleanKey;
-              });
-              const origSpecName = typeof origSpec === 'object' ? origSpec.name : origSpec;
-              specifications[origSpecName] = '';
+          if (isValEmpty && !isPrincipal) {
+            const matchedKey = Object.keys(mergedSpecs).find(k => k.toLowerCase().trim() === cleanKey);
+            if (matchedKey) {
+              delete mergedSpecs[matchedKey];
             }
           } else {
             const origSpec = defaultSpecs.find(s => {
@@ -141,111 +188,101 @@ export async function POST(request: Request) {
               return sName.toLowerCase().trim() === cleanKey;
             });
             const specName = origSpec ? (typeof origSpec === 'object' ? origSpec.name : origSpec) : key.trim();
-            specifications[specName] = val.toString().trim();
+            mergedSpecs[specName] = isValEmpty ? '' : val.toString().trim();
           }
         }
 
-        // Check if product reference already exists
-        let existingProduct: { id: number, specifications: string, stock: number } | undefined = undefined;
-        if (reference) {
-          existingProduct = db.prepare("SELECT id, specifications, stock FROM products WHERE reference = ?").get(reference) as { id: number, specifications: string, stock: number } | undefined;
-        }
+        const diff = stock - existingProduct.stock;
+        const statements: any[] = [];
+        let finalStock = existingProduct.stock;
 
-        if (existingProduct) {
-          // Merge specifications: load old ones, replace with new ones
-          let mergedSpecs: Record<string, string> = {};
-          try {
-            mergedSpecs = JSON.parse(existingProduct.specifications || '{}');
-          } catch (e) {}
+        if (diff !== 0) {
+          const pad = (num: number) => String(num).padStart(2, '0');
+          const now = new Date();
+          const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+          const type_mouvement = diff > 0 ? 'entree' : 'sortie';
+          const qty = Math.abs(diff);
+          finalStock = stock; // set directly to desired stock
 
-          for (const key of Object.keys(row)) {
-            const cleanKey = key.toLowerCase().trim();
-            if (standardAliases.includes(cleanKey)) continue;
-
-            const val = row[key];
-            const isValEmpty = val === undefined || val === null || val.toString().trim() === '';
-            const isPrincipal = defaultSpecNames.includes(cleanKey);
-
-            if (isValEmpty && !isPrincipal) {
-              const matchedKey = Object.keys(mergedSpecs).find(k => k.toLowerCase().trim() === cleanKey);
-              if (matchedKey) {
-                delete mergedSpecs[matchedKey];
-              }
-            } else {
-              const origSpec = defaultSpecs.find(s => {
-                const sName = typeof s === 'object' ? s.name : s;
-                return sName.toLowerCase().trim() === cleanKey;
-              });
-              const specName = origSpec ? (typeof origSpec === 'object' ? origSpec.name : origSpec) : key.trim();
-              mergedSpecs[specName] = isValEmpty ? '' : val.toString().trim();
-            }
-          }
-
-          // Compute stock difference for existing product
-          const diff = stock - existingProduct.stock;
-          if (diff !== 0) {
-            const pad = (num: number) => String(num).padStart(2, '0');
-            const now = new Date();
-            const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-            const type_mouvement = diff > 0 ? 'entree' : 'sortie';
-            const qty = Math.abs(diff);
-
+          statements.push(
             db.prepare(`
               INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
               VALUES (?, ?, ?, NULL, ?, ?)
-            `).run(existingProduct.id, type_mouvement, qty, dateStr, stock);
-          }
+            `).bind(existingProduct.id, type_mouvement, qty, dateStr, stock)
+          );
+        }
 
+        statements.push(
           db.prepare(`
             UPDATE products
             SET type_id = ?, name = ?, purchase_price = ?, selling_price = ?, stock = ?, specifications = ?
             WHERE id = ?
-          `).run(
+          `).bind(
             typeId,
             name,
             purchase_price,
             selling_price,
-            recalculateProductStock(existingProduct.id),
+            finalStock,
             JSON.stringify(mergedSpecs),
             existingProduct.id
-          );
-        } else {
-          const result = db.prepare(`
-            INSERT INTO products (type_id, name, reference, purchase_price, selling_price, stock, specifications)
-            VALUES (?, ?, ?, ?, ?, 0, ?)
-          `).run(
-            typeId,
-            name,
-            reference,
-            purchase_price,
-            selling_price,
-            JSON.stringify(specifications)
-          );
+          )
+        );
 
-          const newProductId = result.lastInsertRowid as number;
+        await db.batch(statements);
+        
+        // Update in cache
+        existingProduct.stock = finalStock;
+        existingProduct.specifications = JSON.stringify(mergedSpecs);
 
-          if (stock > 0) {
-            const pad = (num: number) => String(num).padStart(2, '0');
-            const now = new Date();
-            const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-            
+      } else {
+        const result = await db.prepare(`
+          INSERT INTO products (type_id, name, reference, purchase_price, selling_price, stock, specifications)
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `).run(
+          typeId,
+          name,
+          reference,
+          purchase_price,
+          selling_price,
+          JSON.stringify(specifications)
+        );
+
+        const newProductId = result.lastRowId || (result as any).lastInsertRowid as number;
+        let finalStock = 0;
+        const statements: any[] = [];
+
+        if (stock > 0) {
+          const pad = (num: number) => String(num).padStart(2, '0');
+          const now = new Date();
+          const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+          finalStock = stock;
+
+          statements.push(
             db.prepare(`
               INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
               VALUES (?, 'entree', ?, NULL, ?, ?)
-            `).run(newProductId, stock, dateStr, stock);
-          }
-
-          // Update stock from history
-          db.prepare('UPDATE products SET stock = ? WHERE id = ?').run(
-            recalculateProductStock(newProductId),
-            newProductId
+            `).bind(newProductId, stock, dateStr, stock)
           );
         }
-        importedCount++;
-      }
-    });
 
-    importTransaction(products);
+        statements.push(
+          db.prepare('UPDATE products SET stock = ? WHERE id = ?').bind(finalStock, newProductId)
+        );
+
+        if (statements.length > 0) {
+          await db.batch(statements);
+        }
+
+        // Add to our productsList cache
+        productsList.push({
+          id: newProductId,
+          reference: reference || '',
+          specifications: JSON.stringify(specifications),
+          stock: finalStock
+        });
+      }
+      importedCount++;
+    }
 
     return NextResponse.json({
       success: true,

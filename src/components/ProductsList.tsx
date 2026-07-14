@@ -161,7 +161,7 @@ export default function ProductsList({ initialProducts, categoriesWithTypes }: P
           body: JSON.stringify({ products: importedProducts })
         });
 
-        const result = await response.json();
+        const result = await response.json() as any;
         if (result.success) {
           alert(`تم استيراد ${result.imported} منتج بنجاح.`);
           window.location.reload();

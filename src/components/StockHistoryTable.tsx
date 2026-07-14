@@ -54,7 +54,7 @@ export default function StockHistoryTable({ productId, initialHistory, initialSt
     try {
       const res = await fetch(`/api/products/${productId}/stock?page=${targetPage}&limit=10`);
       if (!res.ok) throw new Error('فشل تحميل سجل حركة المخزون');
-      const data = await res.json();
+      const data = await res.json() as any;
       
       setMovements(data.movements);
       setTotal(data.total);

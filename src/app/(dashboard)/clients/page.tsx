@@ -3,6 +3,7 @@ import Link from 'next/link';
 import PageTitle from '@/components/PageTitle';
 import ClientsList from '@/components/ClientsList';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface Client {
@@ -14,7 +15,7 @@ interface Client {
 }
 
 export default async function ClientsPage() {
-  const clients = db.prepare(`
+  const clients = await db.prepare(`
     SELECT * FROM clients ORDER BY name ASC
   `).all() as Client[];
 

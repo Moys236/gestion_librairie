@@ -195,7 +195,7 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
         })
       });
 
-      const resData = await response.json();
+      const resData = await response.json() as any;
       if (!response.ok) {
         throw new Error(resData.error || 'حدث خطأ أثناء حفظ المنتج.');
       }

@@ -62,7 +62,7 @@ export default function TypeManager() {
     try {
       const res = await fetch('/api/categories');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         setCategories(data);
       }
     } catch (err) {
@@ -74,7 +74,7 @@ export default function TypeManager() {
     try {
       const res = await fetch('/api/types');
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as any;
         setTypes(data);
       }
     } catch (err) {
@@ -131,14 +131,14 @@ export default function TypeManager() {
 
       if (res.ok) {
         setHasChanges(true);
-        const savedCat = await res.json();
+        const savedCat = await res.json() as any;
         await loadCategories();
         
         setSelectedCatId(savedCat.id.toString());
         setCatName(savedCat.name);
         alert('تم الحفظ بنجاح');
       } else {
-        const errData = await res.json();
+        const errData = await res.json() as any;
         alert('خطأ: ' + (errData.error || 'فشل الحفظ'));
       }
     } catch (err) {
@@ -157,7 +157,7 @@ export default function TypeManager() {
           handleNewCategoryClick();
           alert('تم الحذف بنجاح');
         } else {
-          const errData = await res.json();
+          const errData = await res.json() as any;
           alert('خطأ: ' + (errData.error || 'فشل الحذف'));
         }
       } catch (err) {
@@ -245,7 +245,7 @@ export default function TypeManager() {
 
       if (res.ok) {
         setHasChanges(true);
-        const savedType = await res.json();
+        const savedType = await res.json() as any;
         await loadTypes();
         
         setSelectedTypeId(savedType.id.toString());
@@ -263,7 +263,7 @@ export default function TypeManager() {
         }
         alert('تم الحفظ بنجاح');
       } else {
-        const errData = await res.json();
+        const errData = await res.json() as any;
         alert('خطأ: ' + (errData.error || 'فشل الحفظ'));
       }
     } catch (err) {
@@ -282,7 +282,7 @@ export default function TypeManager() {
           handleNewTypeClick();
           alert('تم الحذف بنجاح');
         } else {
-          const errData = await res.json();
+          const errData = await res.json() as any;
           alert('خطأ: ' + (errData.error || 'فشل الحذف'));
         }
       } catch (err) {

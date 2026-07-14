@@ -2,6 +2,7 @@ import db from '@/lib/db';
 import Link from 'next/link';
 import PageTitle from '@/components/PageTitle';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface School {
@@ -14,7 +15,7 @@ interface School {
 }
 
 export default async function SchoolsPage() {
-  const schools = db.prepare(`
+  const schools = await db.prepare(`
     SELECT s.*, (SELECT COUNT(*) FROM school_lists WHERE school_id = s.id) as lists_count 
     FROM schools s
     ORDER BY s.name ASC

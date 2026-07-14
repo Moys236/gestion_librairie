@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import PageTitle from '@/components/PageTitle';
 import ProductsByType from '@/components/ProductsByType';
 
+export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
 interface RawProduct {
@@ -42,7 +43,7 @@ export default async function ProductsByTypePage({
   }
 
   // Fetch type details
-  const type = db.prepare(`
+  const type = await db.prepare(`
     SELECT t.*, c.name as category_name
     FROM types t
     JOIN categories c ON t.category_id = c.id
@@ -60,7 +61,7 @@ export default async function ProductsByTypePage({
   } catch (e) {}
 
   // Fetch products under this type
-  const products = db.prepare(`
+  const products = await db.prepare(`
     SELECT * FROM products 
     WHERE type_id = ? 
     ORDER BY name ASC

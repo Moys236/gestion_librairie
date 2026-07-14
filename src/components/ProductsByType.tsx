@@ -176,7 +176,7 @@ export default function ProductsByType({ type, initialProducts, specsList }: Pro
           })
         });
 
-        const result = await response.json();
+        const result = await response.json() as any;
         if (result.success) {
           alert(`تم استيراد ${result.imported} منتج بنجاح.`);
           window.location.reload();
