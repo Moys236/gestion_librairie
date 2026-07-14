@@ -205,9 +205,14 @@ export async function createOrder(formData: FormData) {
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           fileUrls.push(`data:${file.type};base64,${base64}`);
         } else {
-          const fs = require('fs');
-          const path = require('path');
-          const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+          const requireFunc = typeof require !== 'undefined' ? require : undefined;
+          if (!requireFunc) {
+            throw new Error("Node.js require function is not available.");
+          }
+          const fs = requireFunc('fs');
+          const path = requireFunc('path');
+          const cwdFunc = typeof process !== 'undefined' ? process.cwd : undefined;
+          const uploadDir = path.join(cwdFunc ? cwdFunc() : '', 'public', 'uploads');
           if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
           }
@@ -397,9 +402,14 @@ export async function addSchoolList(formData: FormData) {
         const base64 = Buffer.from(arrayBuffer).toString('base64');
         fileUrl = `data:${file.type};base64,${base64}`;
       } else {
-        const fs = require('fs');
-        const path = require('path');
-        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        const requireFunc = typeof require !== 'undefined' ? require : undefined;
+        if (!requireFunc) {
+          throw new Error("Node.js require function is not available.");
+        }
+        const fs = requireFunc('fs');
+        const path = requireFunc('path');
+        const cwdFunc = typeof process !== 'undefined' ? process.cwd : undefined;
+        const uploadDir = path.join(cwdFunc ? cwdFunc() : '', 'public', 'uploads');
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }

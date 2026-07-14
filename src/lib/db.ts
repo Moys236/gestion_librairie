@@ -71,11 +71,20 @@ class LocalSqliteAdapter implements AsyncDatabase {
   private localDb: any;
 
   constructor() {
-    const Database = require('better-sqlite3');
-    const path = require('path');
-    const fs = require('fs');
+    const requireFunc = typeof require !== 'undefined' ? require : undefined;
+    if (!requireFunc) {
+      throw new Error("Node.js require function is not available.");
+    }
+    const sqliteModule = 'better-sqlite3';
+    const pathModule = 'path';
+    const fsModule = 'fs';
 
-    const dbDir = path.join(process.cwd(), 'db');
+    const Database = requireFunc(sqliteModule);
+    const path = requireFunc(pathModule);
+    const fs = requireFunc(fsModule);
+
+    const cwdFunc = typeof process !== 'undefined' ? process.cwd : undefined;
+    const dbDir = path.join(cwdFunc ? cwdFunc() : '', 'db');
     const dbPath = path.join(dbDir, 'ibnrochd.sqlite');
 
     if (!fs.existsSync(dbDir)) {
