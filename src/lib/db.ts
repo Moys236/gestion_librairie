@@ -1,5 +1,3 @@
-import { getRequestContext } from '@cloudflare/next-on-pages';
-
 export interface AsyncStatement {
   bind(...params: any[]): AsyncStatement;
   all<T = any>(...params: any[]): Promise<T[]>;
@@ -16,11 +14,11 @@ export interface AsyncDatabase {
 
 class D1DatabaseAdapter implements AsyncDatabase {
   private get d1() {
-    const context = getRequestContext();
-    if (!context?.env?.DB) {
-      throw new Error("Liaison Cloudflare D1 'DB' introuvable dans le contexte.");
+    const d1Db = (process.env as any).DB || (globalThis as any).DB;
+    if (!d1Db) {
+      throw new Error("Liaison Cloudflare D1 'DB' introuvable dans process.env ou globalThis.");
     }
-    return context.env.DB;
+    return d1Db;
   }
 
   prepare(sql: string): AsyncStatement {
@@ -36,20 +34,20 @@ class D1DatabaseAdapter implements AsyncDatabase {
       async all<T = any>(...params: any[]): Promise<T[]> {
         const combined = [...this.params, ...params];
         const stmt = self.d1.prepare(this.sql).bind(...combined);
-        const res = await stmt.all<T>();
+        const res = await (stmt as any).all();
         return res.results;
       }
 
       async get<T = any>(...params: any[]): Promise<T | undefined> {
         const combined = [...this.params, ...params];
         const stmt = self.d1.prepare(this.sql).bind(...combined);
-        return await stmt.first<T>() || undefined;
+        return await (stmt as any).first() || undefined;
       }
 
       async run(...params: any[]): Promise<{ success: boolean; changes?: number; lastRowId?: number }> {
         const combined = [...this.params, ...params];
         const stmt = self.d1.prepare(this.sql).bind(...combined);
-        const res = await stmt.run();
+        const res = await (stmt as any).run();
         return {
           success: res.success,
           changes: res.meta.changes,
