@@ -1,4 +1,4 @@
-import { getRequestContext } from '@cloudflare/next-on-pages';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 export interface AsyncStatement {
   bind(...params: any[]): AsyncStatement;
@@ -15,11 +15,20 @@ export interface AsyncDatabase {
 }
 
 class D1DatabaseAdapter implements AsyncDatabase {
-  private get d1() {
-    const ctx = getRequestContext();
-    const d1Db = (ctx.env as any).DB;
+  private async getD1() {
+    try {
+      const { env } = await getCloudflareContext({ async: true });
+      if (env && (env as any).DB) {
+        return (env as any).DB;
+      }
+    } catch (e) {
+      console.warn("Accès asynchrone au contexte Cloudflare échoué :", e);
+    }
+
+    // Fallback pour les environnements de build ou si le contexte asynchrone n'est pas encore résolu
+    const d1Db = (process.env as any).DB || (globalThis as any).DB;
     if (!d1Db) {
-      throw new Error("Liaison Cloudflare D1 'DB' introuvable dans le contexte.");
+      throw new Error("Liaison Cloudflare D1 'DB' introuvable.");
     }
     return d1Db;
   }
@@ -36,21 +45,24 @@ class D1DatabaseAdapter implements AsyncDatabase {
 
       async all<T = any>(...params: any[]): Promise<T[]> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
         const res = await (stmt as any).all();
         return res.results;
       }
 
       async get<T = any>(...params: any[]): Promise<T | undefined> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
         const res = await (stmt as any).first();
         return res || undefined;
       }
 
       async run(...params: any[]): Promise<{ success: boolean; changes?: number; lastRowId?: number }> {
         const combined = [...this.params, ...params];
-        const stmt = self.d1.prepare(this.sql).bind(...combined);
+        const d1 = await self.getD1();
+        const stmt = d1.prepare(this.sql).bind(...combined);
         const res = await (stmt as any).run();
         return {
           success: res.success,
@@ -64,14 +76,12 @@ class D1DatabaseAdapter implements AsyncDatabase {
   }
 
   async batch(statements: AsyncStatement[]): Promise<any[]> {
-    const d1Stmts = statements.map(s => this.d1.prepare(s.sql).bind(...s.params));
-    return await this.d1.batch(d1Stmts);
+    const d1 = await this.getD1();
+    const d1Stmts = statements.map(s => d1.prepare(s.sql).bind(...s.params));
+    return await d1.batch(d1Stmts);
   }
 }
 
-// On Cloudflare (production), always use D1
-// For local dev, the dev server uses setupDevPlatform which provides
-// getRequestContext() as well, so D1DatabaseAdapter works in both cases.
 const db: AsyncDatabase = new D1DatabaseAdapter();
 
 export default db;
