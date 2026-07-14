@@ -1,3 +1,5 @@
+import { getCloudflareContext } from '@opennextjs/cloudflare';
+
 export interface AsyncStatement {
   bind(...params: any[]): AsyncStatement;
   all<T = any>(...params: any[]): Promise<T[]>;
@@ -14,9 +16,17 @@ export interface AsyncDatabase {
 
 class D1DatabaseAdapter implements AsyncDatabase {
   private get d1() {
+    try {
+      const { env } = getCloudflareContext();
+      if (env && (env as any).DB) {
+        return (env as any).DB;
+      }
+    } catch (e) {
+      console.warn("Accès synchrone au contexte Cloudflare échoué :", e);
+    }
     const d1Db = (process.env as any).DB || (globalThis as any).DB;
     if (!d1Db) {
-      throw new Error("Liaison Cloudflare D1 'DB' introuvable dans process.env ou globalThis.");
+      throw new Error("Liaison Cloudflare D1 'DB' introuvable.");
     }
     return d1Db;
   }
