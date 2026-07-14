@@ -111,3 +111,24 @@ CREATE TABLE IF NOT EXISTS stock_histories (
 
 CREATE INDEX IF NOT EXISTS idx_stock_histories_produit_date ON stock_histories(produit_id, date_mouvement DESC);
 
+-- Supplier Request Lists
+CREATE TABLE IF NOT EXISTS supplier_lists (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Supplier Request List Items
+CREATE TABLE IF NOT EXISTS supplier_list_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_id INTEGER NOT NULL,
+  product_id INTEGER NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (list_id) REFERENCES supplier_lists(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  UNIQUE(list_id, product_id)
+);
+
+
