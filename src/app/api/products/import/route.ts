@@ -29,6 +29,7 @@ export async function POST(request: Request) {
     const sellingPriceAliases = ['selling_price', 'سعر البيع', 'prix de vente', 'prix', 'price'];
     const purchasePriceAliases = ['purchase_price', 'سعر الشراء', 'prix d\'achat', 'prix achat'];
     const stockAliases = ['stock', 'المخزون', 'quantité', 'qty'];
+    const colisAliases = ['colis', 'nombre_colis', 'عدد الطرود', 'الطرود', 'nombre de colis', 'nbr_colis'];
     const categoryAliases = ['category', 'الفئة', 'catégorie'];
     const typeAliases = ['type', 'النوع'];
 
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
       ...sellingPriceAliases,
       ...purchasePriceAliases,
       ...stockAliases,
+      ...colisAliases,
       ...categoryAliases,
       ...typeAliases
     ];
@@ -66,6 +68,9 @@ export async function POST(request: Request) {
         
         const stockVal = getValue(row, stockAliases);
         const stock = parseInt(stockVal) || 0;
+        
+        const colisVal = getValue(row, colisAliases);
+        const parsedColis = (colisVal !== undefined && colisVal !== null && colisVal !== '') ? (parseInt(colisVal) || null) : null;
         
         const categoryNameVal = getValue(row, categoryAliases);
         const categoryName = categoryNameVal ? categoryNameVal.toString().trim() : '';
@@ -231,8 +236,8 @@ export async function POST(request: Request) {
             
             db.prepare(`
               INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
-              VALUES (?, 'entree', ?, NULL, ?, ?)
-            `).run(newProductId, stock, dateStr, stock);
+              VALUES (?, 'entree', ?, ?, ?, ?)
+            `).run(newProductId, stock, parsedColis, dateStr, stock);
           }
 
           // Update stock from history

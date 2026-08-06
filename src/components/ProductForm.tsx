@@ -49,6 +49,7 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
   const [purchasePrice, setPurchasePrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [stock, setStock] = useState('0');
+  const [nombreColis, setNombreColis] = useState('');
 
   // Specs states
   const [defaultSpecsList, setDefaultSpecsList] = useState<any[]>(() => {
@@ -191,6 +192,7 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
           purchase_price: purchasePrice || 0,
           selling_price: sellingPrice || 0,
           stock: stock || 0,
+          nombre_colis: nombreColis === '' ? null : Number(nombreColis),
           specifications
         })
       });
@@ -223,6 +225,7 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
         setPurchasePrice('');
         setSellingPrice('');
         setStock('0');
+        setNombreColis('');
         setSpecValues({});
         setCustomSpecs([]);
         setIsRefManuallyEdited(false);
@@ -410,7 +413,7 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
             <button type="button" className="btn btn-outline text-xs mt-2" onClick={handleAddCustomSpec}>+ إضافة خاصية</button>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-semibold mb-1">سعر الشراء</label>
               <input 
@@ -443,6 +446,17 @@ export default function ProductForm({ categories, types, preselectedType }: Prod
                 placeholder="0" 
                 value={stock}
                 onChange={(e) => setStock(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">عدد الطرود (اختياري)</label>
+              <input 
+                type="number" 
+                min="0"
+                className="input" 
+                placeholder="مثال: 5" 
+                value={nombreColis}
+                onChange={(e) => setNombreColis(e.target.value)}
               />
             </div>
           </div>

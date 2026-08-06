@@ -155,6 +155,7 @@ interface ProductData {
   purchase_price?: number | string;
   selling_price: number | string;
   stock?: number | string;
+  nombre_colis?: number | string | null;
 }
 
 /**
@@ -162,11 +163,16 @@ interface ProductData {
  * Works seamlessly within existing outer transactions.
  */
 export function createProductWithInitialStock(productData: ProductData, specifications = {}) {
-  const { type_id, name, reference, purchase_price, selling_price, stock = 0 } = productData;
+  const { type_id, name, reference, purchase_price, selling_price, stock = 0, nombre_colis = null } = productData;
   const initialStock = Number(stock) || 0;
   
   if (initialStock < 0) {
     throw new Error('المخزون الأولي لا يمكن أن يكون سالباً');
+  }
+
+  const parsedColis = (nombre_colis === null || nombre_colis === undefined || nombre_colis === '') ? null : Number(nombre_colis);
+  if (parsedColis !== null && (isNaN(parsedColis) || parsedColis < 0)) {
+    throw new Error('عدد الطرود يجب أن يكون رقماً موجباً أو فارغاً');
   }
   
   const insertProduct = db.prepare(`
@@ -189,8 +195,8 @@ export function createProductWithInitialStock(productData: ProductData, specific
     const dateStr = formatLocalDate(new Date());
     db.prepare(`
       INSERT INTO stock_histories (produit_id, type_mouvement, quantite_unitaire, nombre_colis, date_mouvement, stock_resultat)
-      VALUES (?, 'entree', ?, NULL, ?, ?)
-    `).run(productId, initialStock, dateStr, initialStock);
+      VALUES (?, 'entree', ?, ?, ?, ?)
+    `).run(productId, initialStock, parsedColis, dateStr, initialStock);
   }
 
   // Recalculate and update product table stock

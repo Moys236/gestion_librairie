@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,20266,t=>{"use strict";var e=t.i(71645);t.s(["default",0,function({title:t}){return(0,e.useEffect)(()=>{document.dispatchEvent(new CustomEvent("set-page-title",{detail:t})),document.title=t},[t]),null}])}]);

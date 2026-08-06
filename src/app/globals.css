@@ -70,6 +70,7 @@ button, .btn {
 
 .btn-primary:hover {
   background-color: var(--color-brand-hover);
+  color: var(--color-white);
 }
 
 .btn-primary:active {

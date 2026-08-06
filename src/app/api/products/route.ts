@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    const { type_id, name, reference, purchase_price, selling_price, stock, specifications } = data;
+    const { type_id, name, reference, purchase_price, selling_price, stock, nombre_colis, specifications } = data;
     
     const productId = createProductWithInitialStock({
       type_id: type_id ? Number(type_id) : null,
@@ -29,7 +29,8 @@ export async function POST(request: Request) {
       reference,
       purchase_price: purchase_price ? Number(purchase_price) : 0,
       selling_price: selling_price ? Number(selling_price) : 0,
-      stock: stock ? Number(stock) : 0
+      stock: stock ? Number(stock) : 0,
+      nombre_colis: (nombre_colis === null || nombre_colis === undefined || nombre_colis === '') ? null : Number(nombre_colis)
     }, specifications || {});
     
     const newProduct = db.prepare(`
